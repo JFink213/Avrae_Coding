@@ -2,6 +2,7 @@ embed <drac2>
 #featureToggle
 NewRes = True
 NewEnchantList = True
+RequireBase = False
 
 #Campaign Toggle
 Tides = True
@@ -51,6 +52,8 @@ toolUsed = a.last('u',"default")
 item     = a.last('c',"active")
 target   = a.last('t') if a.last('t') else None
 customMats = int(a.last('m')) if a.last('m') else ""
+baseStyle = a.last('s', "")
+
 
 #channel Data
 runIn = ctx.channel.name
@@ -86,7 +89,7 @@ if a.last('t') and not a.last('c'):
     return f''' -title ":x: Error: No item name input found!" -desc "Assisting other players need an item input. Please try again and make sure you run `!enchant -c \\"item name\\" -t @playerName.`" '''
 
 
-#---------------------------------------------------------------------------ITEM SECTION
+#---------------------------------------------ITEM SECTION--------------------------------------------
 #ItemInput[1]: if no -c input from user
 if item == "active":
     if projectList[0].name != "":
@@ -125,7 +128,68 @@ else:
         else:    
             return f''' -title "Multiple enchantable item matches found!" -desc "**Your Input:** {item}\n**Matches Found:** {len(match)} items\n\n**Please use one of the following commands:**\n {matchDisp.replace("‘","'")}\n***Note**: item matches are pulled from all enchantable items regardless your character Skill Level, Proficiency, and Resources.*"'''
 #with item set up; 
-#PLAYER TIER SECTION
+#Set up for Crafted/Enchanted item, resources, and time.
+cBase = 0
+if baseStyle != "":
+    if item in ["Armor of Gleaming"]:
+        baseItemData = load_json(get_gvar("3f7b3342-417a-4a06-ab28-cfbcd65ee205"))
+    elif item in ["Cast-off Armor", "Smoldering Armor","Mariners Armor", "Armor +1"]:
+        baseItemData = load_json(get_gvar("53768cbb-efc1-4e9d-b00c-31ce0920088e"))        
+    elif item in ["Ammunition +1", "Ammunition +2", "Walloping Ammo"]:
+        baseItemData = load_json(get_gvar("fa14f961-aad9-4c9b-b513-63053fc8475b"))
+    elif item in ["Weapon +1", "Weapon +2", "Weapon of Warming", "Weapon of Certain Death", "Vicious Weapon", "Corpse Slayer"]:
+        baseItemData = load_json(get_gvar("5c32d0cb-d346-4840-b17c-0d825b5e19c2"))       
+    elif item in ["Adamantine Armor", "Mithral Armor"]:
+        baseItemData = load_json(get_gvar("553b6032-268e-487f-abf2-778ef8f6191e"))
+    elif item in ["Achron Blade", "Dragon Slayer", "Sword of Lifestealing", "Sword of Wounding"]:
+        baseItemData = load_json(get_gvar("0912b27f-285a-4768-8ac2-e53343a6634b"))
+    elif item in ["Giant Slayer"]:
+        baseItemData = load_json(get_gvar("d29e098e-3361-4627-a286-7262bf5f77f3"))
+    else:
+        return f''' -f ":no_entry_sign: The item specified does not requre a base item, re-try the ``!enchant`` without the ``-s``." '''
+    cBase = int(baseItemData[baseStyle].craftingTime)
+    if NewRes == True:
+        munResNeeded = baseItemData[baseStyle].resources.mundane if not customMats or customMats == "True" else customMundaneMats
+        cMagResNeeded = weaponData[item].resources.common if not customMats or customMats == "True" else customCommonMats
+        uMagResNeeded = weaponData[item].resources.uncommon if not customMats or customMats == "True" else customUncommonMats
+        rMagResNeeded = weaponData[item].resources.rare if not customMats or customMats == "True" else customRareMats
+    else:
+        resNeeded = weaponData[item].resources if not customMats or customMats == "True" else customMats
+    cEnchant = int(weaponData[item].craftingTime)
+    # total crafting time
+    ctotal = cBase + cEnchant
+    # total enchanting time
+    etotal = int(weaponData[item].enchantingTime)
+else:    
+    #Item Enchantment setup; 
+    #Is the "crafting" done and therefore an enchant roll?
+    kind = "Crafting"
+    projFound = False
+    # total crafting time
+    ctotal = int(weaponData[item].craftingTime)
+    # total enchanting time
+    etotal = int(weaponData[item].enchantingTime)
+    if NewRes == True:
+        munResNeeded = weaponData[item].resources.mundane if not customMats or customMats == "True" else customMundaneMats
+        cMagResNeeded = weaponData[item].resources.common if not customMats or customMats == "True" else customCommonMats
+        uMagResNeeded = weaponData[item].resources.uncommon if not customMats or customMats == "True" else customUncommonMats
+        rMagResNeeded = weaponData[item].resources.rare if not customMats or customMats == "True" else customRareMats
+    else:
+        resNeeded = weaponData[item].resources if not customMats or customMats == "True" else customMats
+#total task time
+taskTotal = ctotal + etotal
+
+for project in projectList:
+    if project.name == item:
+        if int(project.success.craft) >= int(project.total.craft):
+            kind = "Enchanting"
+        else:
+            kind = "Crafting"
+
+
+
+                
+# ------------------------PLAYER TIER SECTION -------------------------------------------
 # check tier against item
 wSkill   = weaponData[item].skillLevel
 tierList = load_json(get_gvar("85a93538-02c0-4277-97b2-23691449f0e1"))
@@ -150,37 +214,16 @@ if NewEnchantList == True:
         if n[len(n)-1] < 8:
             return f''' -title ":x: Error: Insufficient skill level!" -desc "{name} attempts to make a {item} but their tier level is too low to make the item, which requires the {wSkill} skill level." -f "**Tier breakdown vs. Enchant Skill Level**:\n Hero of the Realm and higher -> Common Enchant\n Master of the Realm and higher-> Uncommon Enchant\n Legendary Hero -> Rare Enchantment" ''' 
         
-
-#Item Enchantment setup; 
-#Is the "crafting" done and therefore an enchant roll?
-kind = "Crafting"
-projFound = False
-
-# total crafting time
-ctotal = int(weaponData[item].craftingTime)
-# total enchanting time
-etotal = int(weaponData[item].enchantingTime)
-
-#total task time
-taskTotal = ctotal + etotal
-
-if ctotal==0:
-    kind = "Enchanting"
-else:
-    for project in projectList:
-        if project.name == item:
-            if int(project.success.craft) >= int(project.total.craft):
-                kind = "Enchanting"
-                        
-
-
 #---------------------------------------------------------------------------TOOLS SECTION
 #get proficiency and expertise for tools.
 toolProf = get("pTools", "{}")
 toolExpt = get("eTools", "{}")
     
 #check Tool vs. Item allowable tool
-wTool      = weaponData[item].tools
+if baseStyle != "":
+    wTool = baseItemData[baseStyle].tools
+else:
+    wTool = weaponData[item].tools
 attribute = 0
 p = False
 e = False
@@ -290,15 +333,6 @@ if wTool != "": #wTool = "" means no profs needed,
 
 #[1] Crafting time, Enchanting Time and Resources
 adv,dis,fireRune = "adv" in a and not "dis" in a,"dis" in a and not "adv" in a, "fireRuneCheck" in a
-if NewRes == True:
-    munResNeeded = weaponData[item].resources.mundane if not customMats or customMats == "True" else customMundaneMats
-    cMagResNeeded = weaponData[item].resources.common if not customMats or customMats == "True" else customCommonMats
-    uMagResNeeded = weaponData[item].resources.uncommon if not customMats or customMats == "True" else customUncommonMats
-    rMagResNeeded = weaponData[item].resources.rare if not customMats or customMats == "True" else customRareMats
-else:
-    resNeeded = weaponData[item].resources if not customMats or customMats == "True" else customMats
-craftTime = int(weaponData[item].craftingTime)
-enchantTime = int(weaponData[item].enchantingTime)
 successCraft = 0
 successEnchant = 0
 adjCraftTime = ceil(craftTime/2)
@@ -328,8 +362,12 @@ elif NewRes == True:
         munResHeld = ch.get_cc(munRes)
         rType = munRes
         rIndicator = munResInd
-    if weaponData[item].resources.mundane > munResHeld and exist == False:
-        return f''' -title "{rIndicator} Error: Insufficient {rType}s!" -desc "{item} Requires the item to be crafted first. You do not have enough {rType}s to start a(n) {item}; you need {munResNeeded} to do so, and you have {munResHeld} {rType}s on your person." -f "{cc}|{ch.cc_str(cc)}" '''
+    if baseStyle != "":
+        if baseItemData[baseStyle].resources.mundane > munResHeld and exist == False:
+            return f''' -title "{rIndicator} Error: Insufficient {rType}s!" -desc "{item} Requires the item to be crafted first. You do not have enough {rType}s to start a(n) {item}; you need {munResNeeded} to do so, and you have {munResHeld} {rType}s on your person." -f "{cc}|{ch.cc_str(cc)}" '''
+    else:
+        if weaponData[item].resources.mundane > munResHeld and exist == False:
+            return f''' -title "{rIndicator} Error: Insufficient {rType}s!" -desc "{item} Requires the item to be crafted first. You do not have enough {rType}s to start a(n) {item}; you need {munResNeeded} to do so, and you have {munResHeld} {rType}s on your person." -f "{cc}|{ch.cc_str(cc)}" '''
     if lvl > 4:
         if ch.cc_exists(cMagRes):
             rType = cMagRes
